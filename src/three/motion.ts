@@ -1,61 +1,78 @@
-import { clamp01, damp, keysToY, requestedOpenFloor, STOPS } from './config';
+import { clamp01, damp, FLOOR_Y, keysToY, machineMask, requestedOpenFloor } from './config';
 
-export type MotionState = {
-  carY: number;
+export type MotionPhase = 'open' | 'opening' | 'closing' | 'locked' | 'travelling' | 'arriving';
+
+export interface MotionState {
+  progress: number;
+  cabinY: number;
+  cabinVel: number;
   doorOpen: number;
-  floor: number;
-  locked: boolean;
-};
-
-export function createMotionState(): MotionState {
-  return { carY: 0, doorOpen: 0, floor: 0, locked: true };
+  closedFor: number;
+  settledFor: number;
+  machineBlend: number;
+  activeFloor: number;
+  phase: MotionPhase;
 }
 
-/**
- * Single controller for car height and both door sets.
- * Always closes fully, confirms lock, then travels. After exact arrival
- * it settles before opening. Fast jumps and reversals share the same interlock.
+export const createMotionState = (): MotionState => ({
+  progress: 0, cabinY: 0, cabinVel: 0, doorOpen: 1, closedFor: 0,
+  settledFor: 1, machineBlend: 0, activeFloor: 0, phase: 'open',
+});
+
+const approach = (value: number, target: number, step: number) =>
+  value < target ? Math.min(target, value + step) : Math.max(target, value - step);
+
+/** Mechanical interlock, independent of frame rate, scroll speed, and direction.
+ * A closing frame NEVER moves the car. An arrival frame NEVER opens a door.
  */
-export function stepMotion(
-  state: MotionState,
-  progress: number,
-  dt: number,
-): MotionState {
-  const targetY = keysToY(progress);
-  const openFloor = requestedOpenFloor(progress);
-  const near = Math.abs(state.carY - targetY) < 0.02;
+export function stepMotion(s: MotionState, requestedProgress: number, elapsed: number): void {
+  const dt = Math.min(Math.max(elapsed, 0), 0.1);
+  if (!dt) return;
+  const targetP = clamp01(requestedProgress);
+  s.progress += (targetP - s.progress) * damp(dt, 10);
+  if (Math.abs(targetP - s.progress) < 0.00001) s.progress = targetP;
 
-  // Door interlock: only open when stationary at a stop and unlocked.
-  let doorOpen = state.doorOpen;
-  let locked = state.locked;
+  const targetY = keysToY(s.progress);
+  const difference = targetY - s.cabinY;
+  const mustTravel = difference !== 0;
+  const requestedFloor = requestedOpenFloor(s.progress);
+  const parkedFloor = FLOOR_Y.findIndex((y) => Math.abs(y - s.cabinY) < 0.04);
+  const mayOpen = !mustTravel && parkedFloor >= 0 && requestedFloor === parkedFloor;
+  const previousY = s.cabinY;
 
-  if (openFloor !== null && near) {
-    locked = false;
-    doorOpen = Math.min(1, doorOpen + damp(dt, 6));
+  if (!mayOpen && s.doorOpen > 0) {
+    s.doorOpen = approach(s.doorOpen, 0, dt / 0.58);
+    s.phase = 'closing';
+    s.closedFor = 0;
+    s.settledFor = 0;
+  } else if (mustTravel) {
+    s.closedFor += dt;
+    s.settledFor = 0;
+    s.phase = 'locked';
+    // A short lock-confirmation pause also protects abrupt anchor jumps.
+    if (s.closedFor >= 0.09 && s.machineBlend < 0.025) {
+      const dy = Math.max(-12 * dt, Math.min(12 * dt, difference * damp(dt, 9)));
+      s.cabinY = Math.abs(difference) < 0.0015 ? targetY : s.cabinY + dy;
+      s.phase = 'travelling';
+    }
   } else {
-    // Close first
-    doorOpen = Math.max(0, doorOpen - damp(dt, 8));
-    if (doorOpen < 0.02) {
-      locked = true;
-      doorOpen = 0;
+    s.settledFor += dt;
+    s.closedFor += dt;
+    if (mayOpen && s.settledFor >= 0.12) {
+      s.doorOpen = approach(s.doorOpen, 1, dt / 0.7);
+      s.phase = s.doorOpen === 1 ? 'open' : 'opening';
+      s.closedFor = 0;
+    } else {
+      s.phase = mayOpen ? 'arriving' : 'locked';
     }
   }
 
-  // Move only when doors are closed / locked
-  let carY = state.carY;
-  if (locked || doorOpen < 0.05) {
-    const k = damp(dt, 4.5);
-    carY = carY + (targetY - carY) * k;
-  }
-
-  // Snap when very close to avoid residual drift
-  if (Math.abs(carY - targetY) < 0.005) carY = targetY;
-
-  const floor = STOPS.reduce((best, s) =>
-    Math.abs(keysToY(s.arrival) - carY) < Math.abs(keysToY(STOPS[best].arrival) - carY)
-      ? s.floor
-      : best
-  , 0);
-
-  return { carY, doorOpen, floor, locked };
+  s.cabinVel = (s.cabinY - previousY) / dt;
+  s.activeFloor = FLOOR_Y.findIndex((y) => Math.abs(y - s.cabinY) < 0.04);
+  const machineTarget = s.cabinY === 24 && s.doorOpen === 0 && s.cabinVel === 0
+    ? machineMask(s.progress) : 0;
+  s.machineBlend += (machineTarget - s.machineBlend) * damp(dt, 7);
+  // Snap decisively: an asymptotic blend would leave the camera drifting forever
+  // and keep the on-demand renderer awake.
+  if (Math.abs(machineTarget - s.machineBlend) < 0.0015) s.machineBlend = machineTarget;
 }
