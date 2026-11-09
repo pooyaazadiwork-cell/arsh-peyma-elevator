@@ -1,7 +1,41 @@
 # Arsh Peyma Espadana
 
-Persian RTL elevator journey built with React, TypeScript, Vite, React Three
-Fiber, Three.js, Drei, GSAP ScrollTrigger and React Postprocessing.
+Persian RTL elevator journey built with React, TypeScript, Vite, React Three Fiber, Three.js, Drei, GSAP ScrollTrigger and React Postprocessing.
+
+## Status
+
+Most of the project source is already on this repository.  
+A few large files still need to be added from the original zip (they are too large for the automated upload path used here):
+
+- `src/components/Journey.tsx`
+- `src/components/Sections.tsx`
+- `src/index.css`
+- `src/three/Cabin.tsx`
+- `src/three/Shaft.tsx`
+- `public/images/*` (gallery images)
+- `scripts/verify-browser.mjs` (optional)
+
+## Quick complete setup
+
+```sh
+# clone
+git clone https://github.com/pooyaazadiwork-cell/arsh-peyma-elevator.git
+cd arsh-peyma-elevator
+
+# copy the missing files from the original extracted zip
+# (adjust the path to your extracted folder)
+cp /path/to/extracted/src/components/Journey.tsx src/components/
+cp /path/to/extracted/src/components/Sections.tsx src/components/
+cp /path/to/extracted/src/index.css src/
+cp /path/to/extracted/src/three/Cabin.tsx src/three/
+cp /path/to/extracted/src/three/Shaft.tsx src/three/
+cp -r /path/to/extracted/public/images public/
+cp /path/to/extracted/scripts/verify-browser.mjs scripts/  # optional
+
+git add .
+git commit -m "Add remaining large source files and assets"
+git push
+```
 
 ## Run
 
@@ -40,49 +74,9 @@ npm run preview
 
 `src/three/palette.ts` and the tokens in `src/index.css` use the original
 four-colour identity: paper `#FFFBF4`, sand `#D8CFBC`, stone `#565449`,
-and ink `#11120D`. Intermediate stone and paper shades are derived from
-these values for material depth without introducing a new accent colour.
+and ink `#11120D`.
 
-The page alternates ink About and Footer against sand Projects and paper
-Contact. The 3D shaft uses warm concrete and stone with ink-dark structure
-and matte stone doors.
-
-The navbar paints nothing: no background, border, veil or box, and it keeps one
-colour (`#FFFFFF` on `.header-inner`) from the first pixel of the page to the
-last. Readability comes from `mix-blend-mode: difference` on `.site-header`, so
-the type borrows its contrast from whatever is beneath it — the shaft, an ink
-band, or paper — and can never be swallowed by the model. A `@supports not`
-block restores a solid paper bar with ink text on engines without blend
-support. The mobile sheet is rendered as a sibling of the header so it stays
-outside the blend and reads as matte ink.
-
-`Journey.tsx` also steps its assisted hop aside: if a real gesture moves the
-page away from where the tween placed it, the tween yields instead of dragging
-the visitor back.
-
-The canvas renders continuously while the journey is on screen and stops
-outside it. All geometry is procedural;
-no purchased model, HDR download or 3D image sequence is required. Fonts and
-gallery images are served locally. Gallery content is illustrative placeholder
-data, not a company project portfolio.
-
-## Browser Verification
-
-With the development server running:
-
-```sh
-node scripts/verify-browser.mjs
-```
-
-Puppeteer needs its downloaded Chrome binary and the standard Chrome Linux
-libraries. The script verifies real WebGL rendering, all four stops, reverse
-travel, no movement from mouse input, mobile RTL navigation, horizontal overflow
-and reduced-motion fallback. Screenshots are saved under `artifacts/`.
-
-Production can be tested by passing `TEST_URL=http://localhost:4173`. Optional
-`TEST_WIDTH` and `TEST_HEIGHT` set the desktop viewport. `?inspect` exposes a
-read-only-use snapshot helper for browser tests; normal production visits do
-not expose it.
+All geometry is procedural; no purchased model, HDR download or 3D image sequence is required.
 
 ## Content And Deployment
 
@@ -91,4 +85,3 @@ not expose it.
 - The consultation UI is a frontend prototype; a real submission endpoint must
   be connected before claiming requests are delivered to the company.
 - Reduced-motion preference or unavailable WebGL uses the static RTL site.
-- Font license files are included in `public/fonts/`.
